@@ -3,6 +3,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use dioxus::prelude::*;
+use search_common::types::{CatalogState, ShardState, Status};
 use serde::{Deserialize, Serialize};
 
 // --- Data types ---
@@ -37,6 +38,31 @@ pub enum DiscoveryPhase {
     Complete,
 }
 
+#[derive(Clone, Debug)]
+pub struct SearchResult {
+    pub contract_key: String,
+    pub title: String,
+    pub description: String,
+    pub highlighted_snippet: String,
+    pub combined_score: u32,
+    pub status: Status,
+    pub attestation_count: u32,
+}
+
+#[derive(Clone, Debug)]
+pub struct ContributionRecord {
+    pub contract_key: String,
+    pub timestamp: u64,
+    pub status: ContributionStatus,
+}
+
+#[derive(Clone, Debug)]
+pub enum ContributionStatus {
+    Submitted,
+    Confirmed,
+    Failed(String),
+}
+
 // --- Global signals ---
 
 /// All discovered contract keys -> type mapping
@@ -66,3 +92,27 @@ pub static TYPES_CHECKED: GlobalSignal<usize> = Global::new(|| 0);
 /// HTTP base URL for the node
 pub static NODE_HTTP_BASE: GlobalSignal<String> =
     Global::new(|| "http://127.0.0.1:7509".to_string());
+
+/// Catalog contract state from the network
+pub static CATALOG_STATE: GlobalSignal<Option<CatalogState>> = Global::new(|| None);
+
+/// Shard contract states from the network (shard_id -> ShardState)
+pub static SHARD_STATES: GlobalSignal<HashMap<u8, ShardState>> = Global::new(HashMap::new);
+
+/// Number of shard states loaded
+pub static SHARDS_AVAILABLE: GlobalSignal<u8> = Global::new(|| 0);
+
+/// Total number of shards
+pub static SHARDS_TOTAL: GlobalSignal<u8> = Global::new(|| 16);
+
+/// Full-text search results
+pub static SEARCH_RESULTS: GlobalSignal<Vec<SearchResult>> = Global::new(Vec::new);
+
+/// Whether the contribution pipeline is enabled
+pub static CONTRIBUTION_ENABLED: GlobalSignal<bool> = Global::new(|| false);
+
+/// History of contribution attempts
+pub static CONTRIBUTION_HISTORY: GlobalSignal<Vec<ContributionRecord>> = Global::new(Vec::new);
+
+/// Contributor's public key (if generated)
+pub static CONTRIBUTOR_PUBKEY: GlobalSignal<Option<[u8; 32]>> = Global::new(|| None);

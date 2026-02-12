@@ -3,6 +3,7 @@
 use dioxus::prelude::*;
 use wasm_bindgen::JsValue;
 
+use super::truncate_key;
 use crate::state::NODE_HTTP_BASE;
 use web_sys;
 
@@ -15,6 +16,8 @@ pub fn AppCard(
     size_bytes: Option<u64>,
     version: Option<u64>,
     subscribers: u32,
+    status: Option<String>,
+    attestation_count: u32,
 ) -> Element {
     let node_base = NODE_HTTP_BASE.read();
 
@@ -31,9 +34,19 @@ pub fn AppCard(
     let size_str = size_bytes.map(format_size);
     let sub_str = format_subscribers(subscribers);
 
+    let status_class = match status.as_deref() {
+        Some("Confirmed") => "verification-status confirmed",
+        Some("Pending") => "verification-status pending",
+        Some("Disputed") => "verification-status disputed",
+        _ => "verification-status unverified",
+    };
+    let status_text = status.as_deref().unwrap_or("Unverified");
+
     rsx! {
         div { class: "app-card",
-            h3 { class: "{title_class}", "{display_title}" }
+            div { class: "app-card-header",
+                h3 { class: "{title_class}", "{display_title}" }
+            }
 
             if let Some(desc) = description.as_ref() {
                 p { class: "app-card-description", "{desc}" }
@@ -69,6 +82,18 @@ pub fn AppCard(
                 span { class: "stat", title: "Active subscribers", "{sub_str}" }
             }
 
+            // Verification section
+            div { class: "app-card-verification",
+                div { class: "verification-row",
+                    span { class: "verification-label", "Status" }
+                    span { class: "{status_class}", "{status_text}" }
+                }
+                div { class: "verification-row",
+                    span { class: "verification-label", "Validations" }
+                    span { class: "verification-value", "{attestation_count}" }
+                }
+            }
+
             div { class: "app-card-footer",
                 span { class: "timestamp", "Discovered {date_str}" }
 
@@ -81,28 +106,6 @@ pub fn AppCard(
             }
         }
     }
-}
-
-fn truncate_key(key: &str, max: usize) -> String {
-    if key.len() <= max {
-        return key.to_string();
-    }
-    // Find char-safe split points for non-ASCII safety
-    let half = max / 2;
-    let start_end = key
-        .char_indices()
-        .take_while(|(i, _)| *i < half)
-        .last()
-        .map(|(i, c)| i + c.len_utf8())
-        .unwrap_or(0);
-    let tail_start = key
-        .char_indices()
-        .rev()
-        .take_while(|(i, _)| key.len() - *i <= half)
-        .last()
-        .map(|(i, _)| i)
-        .unwrap_or(key.len());
-    format!("{}...{}", &key[..start_end], &key[tail_start..])
 }
 
 fn format_date(secs: u64) -> String {

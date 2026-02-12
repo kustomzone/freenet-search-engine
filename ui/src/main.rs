@@ -4,12 +4,18 @@ use dioxus::prelude::*;
 
 mod api;
 mod discovery;
+mod search;
 mod state;
 mod views;
 
-use state::{DiscoveryPhase, DISCOVERY_PHASE, NODE_CONNECTED};
+use state::{
+    DiscoveryPhase, DISCOVERY_PHASE, NODE_CONNECTED, SEARCH_QUERY, SEARCH_RESULTS,
+    SHARDS_AVAILABLE,
+};
 use views::app_directory::AppDirectory;
 use views::search_bar::SearchBar;
+use views::search_results::SearchResults;
+use views::settings::SettingsPanel;
 
 fn main() {
     dioxus::logger::initialize_default();
@@ -22,8 +28,26 @@ fn App() -> Element {
         api::init();
     });
 
+    // Reactive search: re-runs when query or shard data changes
+    use_effect(move || {
+        let query = SEARCH_QUERY.read().clone();
+        let has_shards = *SHARDS_AVAILABLE.read() > 0;
+
+        if query.is_empty() || !has_shards {
+            SEARCH_RESULTS.write().clear();
+            return;
+        }
+
+        let parsed = search::query::parse_query(&query);
+        *SEARCH_RESULTS.write() = search::query::execute_search(&parsed);
+    });
+
     let connected = *NODE_CONNECTED.read();
     let phase = DISCOVERY_PHASE.read().clone();
+    let query = SEARCH_QUERY.read().clone();
+    let has_shards = *SHARDS_AVAILABLE.read() > 0;
+    let has_results = !SEARCH_RESULTS.read().is_empty();
+    let show_fulltext = !query.is_empty() && has_shards && has_results;
 
     let status_class = if connected {
         "status-indicator connected"
@@ -42,6 +66,8 @@ fn App() -> Element {
         DiscoveryPhase::DetectingTypes => Some("Detecting types..."),
         DiscoveryPhase::Complete => Some("Scan complete"),
     };
+
+    let mut show_settings = use_signal(|| false);
 
     rsx! {
         document::Stylesheet { href: asset!("/assets/main.css") }
@@ -66,6 +92,14 @@ fn App() -> Element {
                         "Clear cache"
                     }
 
+                    button {
+                        class: "clear-cache-btn",
+                        onclick: move |_| {
+                            show_settings.toggle();
+                        },
+                        if *show_settings.read() { "Close settings" } else { "Settings" }
+                    }
+
                     // Connection status
                     div { class: "{status_class}",
                         span { class: "status-dot" }
@@ -74,11 +108,20 @@ fn App() -> Element {
                 }
             }
 
+            // Settings panel (toggled)
+            if *show_settings.read() {
+                SettingsPanel {}
+            }
+
             // Search bar
             SearchBar {}
 
-            // App directory (main content)
-            AppDirectory {}
+            // Main content: fulltext results when available, otherwise app directory
+            if show_fulltext {
+                SearchResults {}
+            } else {
+                AppDirectory {}
+            }
         }
     }
 }

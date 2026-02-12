@@ -2,3 +2,4 @@
 dist/
 *.wasm
 .claude/
+crates/*/build/

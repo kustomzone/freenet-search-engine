@@ -19,7 +19,7 @@ pub fn try_fetch_title(key: String, version: Option<u64>, size: Option<u64>) {
             Ok((title, description)) => {
                 if title.is_some() {
                     let short = &key[..key.len().min(12)];
-                    tracing::info!("HTTP fallback got title for {}: {:?}", short, title);
+                    tracing::info!("HTTP fallback for {}: title={:?}, desc={:?}", short, title, description);
                     update_catalog_entry(
                         &key,
                         title.as_deref(),

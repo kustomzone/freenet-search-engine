@@ -5,6 +5,7 @@ members = [
     "crates/contract-catalog",
     "crates/contract-fulltext-shard",
     "crates/delegate-identity",
+    "tools/deploy-helper",
 ]
 resolver = "2"
 

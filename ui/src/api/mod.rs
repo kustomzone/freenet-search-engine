@@ -1,5 +1,17 @@
+pub mod contracts;
+pub mod contribution;
 pub mod node_api;
 pub mod types;
+
+pub fn hex_decode(hex: &str) -> Option<Vec<u8>> {
+    if !hex.len().is_multiple_of(2) {
+        return None;
+    }
+    (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok())
+        .collect()
+}
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -53,7 +65,16 @@ pub fn init() {
         }
     }
 
-    // 2. Now connect WebSocket — callbacks fire asynchronously after we return
+    // 2. Restore contribution settings from localStorage
+    *crate::state::CONTRIBUTION_ENABLED.write() = contribution::load_contribution_enabled();
+    if let Some((_, pubkey)) = contribution::load_keypair_from_storage() {
+        *crate::state::CONTRIBUTOR_PUBKEY.write() = Some(pubkey);
+    }
+
+    // 3. Load cached catalog/shard states from localStorage
+    contracts::load_cached_states();
+
+    // 4. Now connect WebSocket — callbacks fire asynchronously after we return
     let config = NodeConfig::default();
     node_api::connect_node_api(&config);
 }

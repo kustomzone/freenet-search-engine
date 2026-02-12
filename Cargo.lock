@@ -632,6 +632,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "deploy-helper"
+version = "0.1.0"
+dependencies = [
+ "bs58",
+ "ciborium",
+ "ed25519-dalek",
+ "rand 0.8.5",
+ "search-common",
+ "serde",
+]
+
+[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1292,12 +1304,18 @@ name = "freenet-search-engine"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "ciborium",
  "dioxus",
+ "ed25519-dalek",
  "freenet-stdlib",
+ "getrandom 0.2.17",
  "js-sys",
  "lzma-rs",
+ "rand 0.8.5",
+ "search-common",
  "serde",
  "serde_json",
+ "sha2",
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",

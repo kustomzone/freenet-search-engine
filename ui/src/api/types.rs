@@ -1,13 +1,3 @@
-/// Connection state for a WebSocket client.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub enum WsState {
-    #[default]
-    Disconnected,
-    Connecting,
-    Connected,
-    Error(String),
-}
-
 /// Configuration for connecting to a Freenet node.
 #[derive(Clone, Debug)]
 pub struct NodeConfig {

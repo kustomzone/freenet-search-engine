@@ -13,20 +13,22 @@ use wasm_bindgen::JsCast;
 use web_sys::{MessageEvent, WebSocket};
 
 use crate::state::{
-    ContractType, DiscoveryPhase, APP_CATALOG, CONTRACT_TYPES, DISCOVERY_PHASE, NODE_CONNECTED,
-    TOTAL_CONTRACTS, TYPES_CHECKED, TYPE_CHECK_QUEUE,
+    ContractType, ContributionStatus, DiscoveryPhase, APP_CATALOG, CONTRIBUTION_HISTORY,
+    CONTRACT_TYPES, DISCOVERY_PHASE, NODE_CONNECTED, TOTAL_CONTRACTS, TYPES_CHECKED,
+    TYPE_CHECK_QUEUE,
 };
 
-use super::types::{NodeConfig, WsState};
-
-/// Global signal tracking the node API connection state.
-pub static NODE_API_STATE: GlobalSignal<WsState> = Global::new(WsState::default);
+use super::types::NodeConfig;
 
 /// Prevent duplicate polling intervals across reconnections.
 static POLLING_STARTED: AtomicBool = AtomicBool::new(false);
 
 /// Interval between diagnostics queries (milliseconds).
 const POLL_INTERVAL_MS: i32 = 10_000;
+
+/// Interval between catalog/shard re-fetch (milliseconds).
+/// Compensates for subscription timeouts — ensures state stays fresh.
+const INDEX_REFETCH_INTERVAL_MS: i32 = 30_000;
 
 /// Interval between type-check GET request batches (milliseconds).
 const TYPE_CHECK_INTERVAL_MS: i32 = 300;
@@ -44,7 +46,7 @@ fn set_current_ws(ws: Rc<RefCell<WebSocket>>) {
     CURRENT_WS.with(|cell| *cell.borrow_mut() = Some(ws));
 }
 
-fn with_current_ws<F: FnOnce(&WebSocket)>(f: F) {
+pub fn with_current_ws<F: FnOnce(&WebSocket)>(f: F) {
     CURRENT_WS.with(|cell| {
         if let Some(ws) = cell.borrow().as_ref() {
             let ws = ws.borrow();
@@ -59,14 +61,10 @@ fn with_current_ws<F: FnOnce(&WebSocket)>(f: F) {
 pub fn connect_node_api(config: &NodeConfig) {
     let url = config.api_url.clone();
 
-    *NODE_API_STATE.write() = WsState::Connecting;
-
     let ws = match WebSocket::new(&url) {
         Ok(ws) => ws,
         Err(e) => {
-            let msg = format!("Failed to create WebSocket: {:?}", e);
-            tracing::error!("{}", msg);
-            *NODE_API_STATE.write() = WsState::Error(msg);
+            tracing::error!("Failed to create WebSocket: {:?}", e);
             return;
         }
     };
@@ -78,7 +76,6 @@ pub fn connect_node_api(config: &NodeConfig) {
     let ws_for_open = ws_rc.clone();
     let onopen = Closure::<dyn FnMut()>::new(move || {
         tracing::info!("Node API WebSocket connected");
-        *NODE_API_STATE.write() = WsState::Connected;
         *NODE_CONNECTED.write() = true;
 
         // Update shared handle so existing intervals use the new connection
@@ -86,6 +83,12 @@ pub fn connect_node_api(config: &NodeConfig) {
 
         // Send diagnostics immediately
         send_diagnostics_query(&ws_for_open.borrow());
+
+        // Subscribe to search index contracts (catalog + 16 shards)
+        super::contracts::subscribe_catalog(&ws_for_open.borrow());
+        for shard_id in 0u8..16 {
+            super::contracts::subscribe_shard(&ws_for_open.borrow(), shard_id);
+        }
 
         // Only start intervals once (they persist across reconnects)
         if !POLLING_STARTED.swap(true, Ordering::SeqCst) {
@@ -107,7 +110,6 @@ pub fn connect_node_api(config: &NodeConfig) {
 
     let onerror = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
         tracing::error!("Node API WebSocket error");
-        *NODE_API_STATE.write() = WsState::Error("WebSocket error".into());
         *NODE_CONNECTED.write() = false;
     });
     ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
@@ -116,7 +118,6 @@ pub fn connect_node_api(config: &NodeConfig) {
     let url_for_reconnect = config.api_url.clone();
     let onclose = Closure::<dyn FnMut()>::new(move || {
         tracing::warn!("Node API WebSocket closed, will reconnect in 5s");
-        *NODE_API_STATE.write() = WsState::Disconnected;
         *NODE_CONNECTED.write() = false;
         schedule_reconnect(url_for_reconnect.clone());
     });
@@ -124,7 +125,7 @@ pub fn connect_node_api(config: &NodeConfig) {
     onclose.forget();
 }
 
-fn send_request(ws: &WebSocket, request: &ClientRequest) {
+pub fn send_request(ws: &WebSocket, request: &ClientRequest) {
     match bincode::serialize(request) {
         Ok(bytes) => {
             if let Err(e) = ws.send_with_u8_array(&bytes) {
@@ -197,39 +198,54 @@ fn handle_host_response(bytes: &[u8]) {
             }
         }
         HostResponse::ContractResponse(ContractResponse::GetResponse { key, state, .. }) => {
-            let key_str = format!("{}", key);
-            let contract_type = detect_web_container(state.as_ref());
+            // Route search index contract responses to their handlers
+            if super::contracts::is_catalog_key(&key) {
+                super::contracts::handle_catalog_response(state.as_ref());
+                return;
+            }
+            if super::contracts::matching_shard_id(&key).is_some() {
+                super::contracts::handle_shard_response(state.as_ref());
+                return;
+            }
 
-            // If it's a WebApp, always extract version/size and attempt title resolution
+            let key_str = format!("{}", key);
+            let contract_type =
+                crate::discovery::detector::detect_contract_type(state.as_ref());
+
+            // If it's a WebApp, extract metadata and update catalog
             if contract_type == ContractType::WebApp {
                 let size = state.as_ref().len() as u64;
                 let version = crate::discovery::title::extract_version_from_state(state.as_ref());
 
-                let already_has_title = APP_CATALOG
-                    .read()
-                    .get(&key_str)
-                    .and_then(|e| e.title.as_ref())
-                    .is_some();
+                let (has_title, has_description, cached_version) = {
+                    let catalog = APP_CATALOG.read();
+                    match catalog.get(&key_str) {
+                        Some(entry) => (
+                            entry.title.is_some(),
+                            entry.description.is_some(),
+                            entry.version,
+                        ),
+                        None => (false, false, None),
+                    }
+                };
 
-                if already_has_title {
-                    // Still update version/size for entries that already have a title
-                    crate::discovery::title::update_catalog_entry(
-                        &key_str,
-                        None,
-                        None,
-                        Some(size),
-                        version,
-                    );
-                    crate::discovery::cache::save_cache();
-                } else {
-                    // Fire HTTP fallback first (async, non-blocking — fastest path)
-                    crate::discovery::http_fallback::try_fetch_title(
-                        key_str.clone(),
-                        version,
-                        Some(size),
-                    );
+                // Re-extract when title or description is missing, or version changed
+                let version_changed = match (version, cached_version) {
+                    (Some(v), Some(cv)) => v != cv,
+                    (Some(_), None) => true,
+                    _ => false,
+                };
+                let needs_extraction = !has_title || !has_description || version_changed;
 
-                    // Then try xz decompression synchronously as a second path
+                if needs_extraction {
+                    if !has_title {
+                        crate::discovery::http_fallback::try_fetch_title(
+                            key_str.clone(),
+                            version,
+                            Some(size),
+                        );
+                    }
+
                     let (title, description) =
                         crate::discovery::title::extract_title_from_state(state.as_ref());
 
@@ -240,8 +256,22 @@ fn handle_host_response(bytes: &[u8]) {
                         Some(size),
                         version,
                     );
-                    crate::discovery::cache::save_cache();
+                } else {
+                    // Fully cached and unchanged — just update size
+                    crate::discovery::title::update_catalog_entry(
+                        &key_str,
+                        None,
+                        None,
+                        Some(size),
+                        version,
+                    );
                 }
+                crate::discovery::cache::save_cache();
+            }
+
+            // Trigger contribution pipeline if enabled and this is a WebApp
+            if contract_type == ContractType::WebApp {
+                super::contribution::contribute_entry(key_str.clone(), state.as_ref().to_vec());
             }
 
             CONTRACT_TYPES.write().insert(key_str, contract_type);
@@ -251,6 +281,29 @@ fn handle_host_response(bytes: &[u8]) {
             // Update discovery phase based on queue state
             if TYPE_CHECK_QUEUE.read().is_empty() {
                 *DISCOVERY_PHASE.write() = DiscoveryPhase::Complete;
+            }
+        }
+        HostResponse::ContractResponse(ContractResponse::UpdateResponse { key, .. }) => {
+            // Catalog/shard update accepted — mark contribution as confirmed
+            if super::contracts::is_catalog_key(&key) {
+                let mut history = CONTRIBUTION_HISTORY.write();
+                if let Some(record) = history
+                    .iter_mut()
+                    .rev()
+                    .find(|r| matches!(r.status, ContributionStatus::Submitted))
+                {
+                    record.status = ContributionStatus::Confirmed;
+                }
+            }
+        }
+        HostResponse::ContractResponse(ContractResponse::UpdateNotification { key, .. }) => {
+            // A subscribed contract was updated — re-fetch full state
+            if super::contracts::is_catalog_key(&key) {
+                tracing::info!("Catalog contract updated, re-fetching...");
+                with_current_ws(super::contracts::subscribe_catalog);
+            } else if let Some(shard_id) = super::contracts::matching_shard_id(&key) {
+                tracing::debug!("Shard {} updated, re-fetching...", shard_id);
+                with_current_ws(|ws| super::contracts::subscribe_shard(ws, shard_id));
             }
         }
         HostResponse::Ok => {}
@@ -272,6 +325,21 @@ fn start_polling_intervals() {
         POLL_INTERVAL_MS,
     );
     diag_callback.forget();
+
+    // Periodic re-fetch of catalog + shard states (compensates for subscription timeouts)
+    let refetch_callback = Closure::<dyn FnMut()>::new(move || {
+        with_current_ws(|ws| {
+            super::contracts::subscribe_catalog(ws);
+            for shard_id in 0u8..16 {
+                super::contracts::subscribe_shard(ws, shard_id);
+            }
+        });
+    });
+    let _ = window.set_interval_with_callback_and_timeout_and_arguments_0(
+        refetch_callback.as_ref().unchecked_ref(),
+        INDEX_REFETCH_INTERVAL_MS,
+    );
+    refetch_callback.forget();
 
     // Type-check polling — send up to TYPE_CHECK_BATCH_SIZE requests per tick
     let type_callback = Closure::<dyn FnMut()>::new(move || {
@@ -297,33 +365,6 @@ fn start_polling_intervals() {
         TYPE_CHECK_INTERVAL_MS,
     );
     type_callback.forget();
-}
-
-/// Check if contract state bytes look like a web container.
-/// Web container format: [metadata_size: u64 BE][metadata][web_size: u64 BE][tar.xz data]
-pub fn detect_web_container(state: &[u8]) -> ContractType {
-    if state.len() < 16 {
-        return ContractType::Data;
-    }
-    let metadata_size = u64::from_be_bytes(state[..8].try_into().unwrap());
-    if metadata_size > 1024 || metadata_size == 0 {
-        return ContractType::Data;
-    }
-    let web_offset = 8 + metadata_size as usize;
-    if state.len() < web_offset + 8 {
-        return ContractType::Data;
-    }
-    let web_size = u64::from_be_bytes(state[web_offset..web_offset + 8].try_into().unwrap());
-    if web_size == 0 || web_size > 100 * 1024 * 1024 {
-        return ContractType::Data;
-    }
-    // Sizes are plausible and total roughly matches state length
-    let expected_total = 8 + metadata_size as usize + 8 + web_size as usize;
-    if expected_total == state.len() {
-        ContractType::WebApp
-    } else {
-        ContractType::Data
-    }
 }
 
 fn schedule_reconnect(url: String) {

@@ -13,13 +13,16 @@ The project is a Rust workspace with 5 crates:
 | `contract-fulltext-shard` | Freenet contract storing inverted index shards for full-text search |
 | `delegate-identity` | Freenet delegate managing ed25519 keypairs for contributor identity |
 | `ui` | Dioxus 0.7 WASM app — browsing, search, and contribution UI |
+| `deploy-helper` | CLI tool generating CBOR artifacts and contract IDs for deployment |
 
 ### How it works
 
-1. **Catalog contract** stores metadata (title, description, snippet) for every indexed web app, with contributor attestations and reputation scores
-2. **Fulltext shard contracts** store an inverted index partitioned by keyword hash, enabling search across all indexed apps
-3. **Identity delegate** manages a local ed25519 keypair for signing contributions (private key never leaves the node)
-4. **UI** connects to the local Freenet node via WebSocket, discovers contracts, and renders a searchable app directory
+1. **Discovery** — the UI connects to the local Freenet node via WebSocket, polls diagnostics for all contracts, and type-detects web apps by fetching their state
+2. **Metadata extraction** — for each web app, the UI decompresses the web container (xz tar), finds `index.html`, and extracts title and description from `<meta>` tags (falls back to visible body text when no meta tags exist)
+3. **Catalog contract** stores metadata (title, description, snippet) for every indexed web app, with contributor attestations and reputation scores
+4. **Fulltext shard contracts** (16 shards) store an inverted index partitioned by keyword hash, enabling search across all indexed apps
+5. **Contribution pipeline** — when enabled, the UI automatically contributes discovered app metadata to the catalog and shard contracts with proof-of-work antiflood tokens
+6. **Deduplication** — when multiple contracts share the same title (e.g. different deployments of the same app), the UI picks the best one by catalog attestation count (network-wide signal), then state size, then version
 
 ### Key design decisions
 
@@ -29,6 +32,7 @@ The project is a Rust workspace with 5 crates:
 - **Bloom filter sync** for `summarize_state` / `get_state_delta` — compact, efficient for grow-only CRDTs (k=7, SHA-256)
 - **Anti-Sybil** — antiflood tokens (proof-of-work) + ed25519 signatures + temporal staking (triple cost per attack)
 - **Deterministic extraction** — single pipeline in `search-common` so all contributors produce identical metadata hashes
+- **Attestation-based ranking** — deduplication uses catalog attestation count (network-wide) rather than subscriber count (local peers only)
 
 ## Development
 
@@ -48,10 +52,10 @@ cargo fmt --all --check
 cargo check -p freenet-search-engine --target wasm32-unknown-unknown
 
 # Dev server (connects to Freenet node at ws://127.0.0.1:7509)
-dx serve
+cd ui && dx serve
 
 # Release build
-dx build --release
+cd ui && dx build --release
 ```
 
 Smoke tests are available in `tests/`:
@@ -60,15 +64,25 @@ Smoke tests are available in `tests/`:
 
 ## Deployment
 
-### Local (single node)
+### Live deployment
 
 ```bash
-scripts/deploy-local.sh
+scripts/deploy-live.sh              # Incremental deploy (skips unchanged contracts)
+scripts/deploy-live.sh --force      # Rebuild and republish everything
+scripts/deploy-live.sh --dry-run    # Show what would be deployed without publishing
 ```
 
-Deploys both contracts and the web app to a local Freenet node.
+The deploy script handles the full pipeline:
+- Builds contract WASMs and generates CBOR artifacts via `deploy-helper`
+- Computes contract IDs and compares against a SHA256 manifest (`target/deploy/.manifest`)
+- Queries the node to check which contracts are already stored
+- Only publishes contracts that changed or are missing from the node
+- Builds the Dioxus UI with the correct `base_path` for the webapp contract
+- Packages, signs, and publishes the webapp with an auto-incrementing version
 
-### Network (multi-node)
+On a second run with no changes, all 18 contracts are skipped.
+
+### Local test network
 
 ```bash
 scripts/network-start.sh        # Start a local Freenet network
@@ -77,11 +91,15 @@ scripts/redeploy-webapp.sh      # Redeploy just the web app after UI changes
 scripts/network-stop.sh         # Stop the network
 ```
 
-Test apps for populating the index:
+### Adding app descriptions
 
-```bash
-tests/integration/publish-test-apps.sh
+Web apps on the network get their descriptions extracted automatically. To ensure your app has a good description, add meta tags to your `index.html`:
+
+```html
+<meta name="description" content="Your app description here.">
 ```
+
+If no meta description tag is present, the search engine falls back to extracting visible text from the HTML body.
 
 ## Design Document
 

@@ -49,6 +49,12 @@ pub fn extract_title_from_state(state: &[u8]) -> (Option<String>, Option<String>
         );
     }
 
+    tracing::info!(
+        "Extracted from index.html: title={:?}, description={:?}",
+        title.as_deref().map(|t| &t[..t.len().min(40)]),
+        description.as_deref().map(|d| &d[..d.len().min(60)])
+    );
+
     (title, description)
 }
 
@@ -70,6 +76,7 @@ pub fn extract_title_from_html(html: &str) -> Option<String> {
 }
 
 /// Try multiple strategies to extract a description from HTML.
+/// Falls back to extracting visible body text if no meta description exists.
 pub fn extract_description_from_html(html: &str) -> Option<String> {
     if let Some(d) = extract_meta_content(html, "description") {
         return Some(d);
@@ -77,7 +84,8 @@ pub fn extract_description_from_html(html: &str) -> Option<String> {
     if let Some(d) = extract_meta_property(html, "og:description") {
         return Some(d);
     }
-    None
+    // Fallback: extract visible text from the HTML body
+    extract_body_text_snippet(html, 200)
 }
 
 /// Extract the version number from web container CBOR metadata.
@@ -152,6 +160,100 @@ pub fn update_catalog_entry(
         entry.version = Some(v);
     }
     entry.last_seen = now;
+}
+
+/// Extract a short visible-text snippet from HTML body as a fallback description.
+fn extract_body_text_snippet(html: &str, max_chars: usize) -> Option<String> {
+    let mut text = html.to_string();
+
+    // Strip <script>...</script>
+    loop {
+        let lower = text.to_lowercase();
+        if let Some(start) = lower.find("<script") {
+            if let Some(end_rel) = lower[start..].find("</script>") {
+                let end = start + end_rel + "</script>".len();
+                text = format!("{}{}", &text[..start], &text[end..]);
+                continue;
+            }
+        }
+        break;
+    }
+
+    // Strip <style>...</style>
+    loop {
+        let lower = text.to_lowercase();
+        if let Some(start) = lower.find("<style") {
+            if let Some(end_rel) = lower[start..].find("</style>") {
+                let end = start + end_rel + "</style>".len();
+                text = format!("{}{}", &text[..start], &text[end..]);
+                continue;
+            }
+        }
+        break;
+    }
+
+    // Try to find <body> content
+    let lower = text.to_lowercase();
+    let body_text = if let Some(body_start) = lower.find("<body") {
+        let content_start = lower[body_start..].find('>').map(|i| body_start + i + 1)?;
+        let body_end = lower[content_start..]
+            .find("</body>")
+            .map(|i| content_start + i)
+            .unwrap_or(text.len());
+        &text[content_start..body_end]
+    } else {
+        &text
+    };
+
+    // Strip all HTML tags
+    let stripped = strip_tags(body_text);
+
+    // Collapse whitespace and trim
+    let mut result = String::with_capacity(stripped.len());
+    let mut prev_space = false;
+    for c in stripped.chars() {
+        if c.is_whitespace() {
+            if !prev_space && !result.is_empty() {
+                result.push(' ');
+                prev_space = true;
+            }
+        } else {
+            result.push(c);
+            prev_space = false;
+        }
+    }
+    let trimmed = result.trim();
+
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let end = if trimmed.len() <= max_chars {
+        return Some(trimmed.to_string());
+    } else {
+        let mut end = max_chars;
+        while end > 0 && !trimmed.is_char_boundary(end) {
+            end -= 1;
+        }
+        end
+    };
+
+    Some(trimmed[..end].trim_end().to_string())
+}
+
+fn strip_tags(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut in_tag = false;
+    for c in s.chars() {
+        if c == '<' {
+            in_tag = true;
+        } else if c == '>' {
+            in_tag = false;
+        } else if !in_tag {
+            result.push(c);
+        }
+    }
+    result
 }
 
 /// Parse web container format and decompress the xz tar archive.

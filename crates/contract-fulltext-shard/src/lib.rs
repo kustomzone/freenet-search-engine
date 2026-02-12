@@ -11,6 +11,7 @@ use search_common::types::*;
 
 pub struct Contract;
 
+// NOTE: Design specifies shard_count from Parameters, but kept as const for now.
 const SHARD_COUNT: u8 = 16;
 
 fn cbor_serialize<T: serde::Serialize>(val: &T) -> Vec<u8> {

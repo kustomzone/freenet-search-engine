@@ -2,25 +2,14 @@
 
 use dioxus::prelude::*;
 
-use crate::state::{
-    NODE_HTTP_BASE, SEARCH_LOADING, SEARCH_RESULTS, SHARDS_AVAILABLE, SHARDS_TOTAL,
-};
+use crate::state::{NODE_HTTP_BASE, SEARCH_RESULTS, SHARDS_AVAILABLE, SHARDS_TOTAL};
 
 #[component]
 pub fn SearchResults() -> Element {
     let results = SEARCH_RESULTS.read();
-    let loading = *SEARCH_LOADING.read();
     let shards_available = *SHARDS_AVAILABLE.read();
     let shards_total = *SHARDS_TOTAL.read();
     let node_base = NODE_HTTP_BASE.read();
-
-    if loading {
-        return rsx! {
-            div { class: "search-results",
-                div { class: "search-loading", "Searching..." }
-            }
-        };
-    }
 
     rsx! {
         div { class: "search-results",
@@ -45,21 +34,16 @@ pub fn SearchResults() -> Element {
                         let url = format!("{}/v1/contract/web/{}/", node_base, result.contract_key);
                         let short_key = truncate_key(&result.contract_key, 20);
                         let status_class = match result.status {
-                            search_common::types::Status::Confirmed => "trust-badge confirmed",
-                            search_common::types::Status::Pending => "trust-badge pending",
-                            search_common::types::Status::Disputed => "trust-badge disputed",
-                            search_common::types::Status::Expired => "trust-badge",
+                            search_common::types::Status::Confirmed => "verification-status confirmed",
+                            search_common::types::Status::Pending => "verification-status pending",
+                            search_common::types::Status::Disputed => "verification-status disputed",
+                            search_common::types::Status::Expired => "verification-status unverified",
                         };
                         let status_text = match result.status {
                             search_common::types::Status::Confirmed => "Confirmed",
                             search_common::types::Status::Pending => "Pending",
                             search_common::types::Status::Disputed => "Disputed",
                             search_common::types::Status::Expired => "Expired",
-                        };
-                        let attestation_text = if result.attestation_count == 1 {
-                            "1 attestation".to_string()
-                        } else {
-                            format!("{} attestations", result.attestation_count)
                         };
 
                         rsx! {
@@ -71,14 +55,16 @@ pub fn SearchResults() -> Element {
                                     "{result.title}"
                                 }
 
+                                if !result.description.is_empty() {
+                                    p { class: "search-result-description", "{result.description}" }
+                                }
+
                                 div {
                                     class: "search-result-snippet",
                                     dangerous_inner_html: "{result.highlighted_snippet}",
                                 }
 
                                 div { class: "search-result-meta",
-                                    span { class: "{status_class}", "{status_text}" }
-                                    span { "{attestation_text}" }
                                     span {
                                         class: "mono",
                                         title: "{result.contract_key}",
@@ -87,6 +73,14 @@ pub fn SearchResults() -> Element {
                                     span { class: "search-result-score",
                                         "score: {result.combined_score}"
                                     }
+                                }
+
+                                div { class: "search-result-verification",
+                                    span { class: "verification-label", "Status" }
+                                    span { class: "{status_class}", "{status_text}" }
+                                    span { class: "verification-sep" }
+                                    span { class: "verification-label", "Validations" }
+                                    span { class: "verification-value", "{result.attestation_count}" }
                                 }
                             }
                         }

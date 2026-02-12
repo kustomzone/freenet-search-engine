@@ -5,9 +5,11 @@ use std::collections::HashMap;
 use dioxus::prelude::*;
 
 use super::app_card::AppCard;
+use search_common::types::CatalogState;
+
 use crate::state::{
-    AppEntry, ContractType, DiscoveryPhase, APP_CATALOG, CONTRACT_TYPES, DISCOVERY_PHASE,
-    NODE_CONNECTED, SEARCH_QUERY,
+    AppEntry, ContractType, DiscoveryPhase, APP_CATALOG, CATALOG_STATE, CONTRACT_TYPES,
+    DISCOVERY_PHASE, NODE_CONNECTED, SEARCH_QUERY,
 };
 
 #[component]
@@ -35,8 +37,10 @@ pub fn AppDirectory() -> Element {
         }
     }
 
-    // Deduplicate: group by title, keep the best version per title
-    let entries = deduplicate_by_title(entries);
+    // Deduplicate: group by title, keep the best entry per title
+    let catalog_state = CATALOG_STATE.read();
+    let entries = deduplicate_by_title(entries, &*catalog_state);
+    drop(catalog_state);
 
     // Apply search
     let entries: Vec<_> = entries
@@ -93,16 +97,44 @@ pub fn AppDirectory() -> Element {
                         {
                             let entry = app_entry.clone();
                             let now = js_sys::Date::now() as u64 / 1000;
+
+                            // Merge verification data from catalog contract state
+                            let catalog_state = CATALOG_STATE.read();
+                            let (cat_desc, status_str, att_count) = if let Some(ref cs) = *catalog_state {
+                                if let Some(cat_entry) = cs.entries.get(key) {
+                                    let best = cat_entry.hash_variants.values().max_by_key(|v| v.total_weight);
+                                    let desc = best.map(|v| v.description.clone());
+                                    let status = format!("{:?}", cat_entry.status);
+                                    let atts: u32 = cat_entry.hash_variants.values()
+                                        .map(|v| v.attestations.len() as u32).sum();
+                                    (desc, Some(status), atts)
+                                } else {
+                                    (None, None, 0)
+                                }
+                            } else {
+                                (None, None, 0)
+                            };
+                            drop(catalog_state);
+
+                            // Prefer catalog description over discovery description
+                            // Filter empty strings — older contributions lack descriptions
+                            let description = cat_desc
+                                .filter(|d| !d.is_empty())
+                                .or_else(|| entry.as_ref().and_then(|e| e.description.clone()))
+                                .filter(|d| !d.is_empty());
+
                             rsx! {
                                 AppCard {
                                     key: "{key}",
                                     contract_key: key.clone(),
                                     title: entry.as_ref().and_then(|e| e.title.clone()),
-                                    description: entry.as_ref().and_then(|e| e.description.clone()),
+                                    description: description,
                                     first_seen: entry.as_ref().map(|e| e.first_seen).unwrap_or(now),
                                     size_bytes: entry.as_ref().and_then(|e| e.size_bytes),
                                     version: entry.as_ref().and_then(|e| e.version),
                                     subscribers: entry.as_ref().map(|e| e.subscribers).unwrap_or(0),
+                                    status: status_str,
+                                    attestation_count: att_count,
                                 }
                             }
                         }
@@ -113,12 +145,14 @@ pub fn AppDirectory() -> Element {
     }
 }
 
-/// Group entries by title and keep only the best version per app.
-/// "Best" = highest metadata version (newer release), then most subscribers,
-/// then largest state size as final tiebreaker.
-/// Entries without a title are kept as-is (can't group them).
+/// Group entries by title and keep only the best entry per app.
+///
+/// Ranking: catalog attestations (network-wide signal) > state size
+/// (larger = more complete) > version (tiebreaker).
+/// Subscribers are NOT used — they only reflect direct peers, not the network.
 fn deduplicate_by_title(
     entries: Vec<(String, Option<AppEntry>)>,
+    catalog_state: &Option<CatalogState>,
 ) -> Vec<(String, Option<AppEntry>)> {
     let mut by_title: HashMap<String, (String, AppEntry)> = HashMap::new();
     let mut no_title: Vec<(String, Option<AppEntry>)> = Vec::new();
@@ -135,13 +169,15 @@ fn deduplicate_by_title(
         let title_lower = title.to_lowercase();
 
         if let Some(existing) = by_title.get(&title_lower) {
+            let new_atts = attestation_count(catalog_state, &key);
+            let old_atts = attestation_count(catalog_state, &existing.0);
+            let new_size = e.size_bytes.unwrap_or(0);
+            let old_size = existing.1.size_bytes.unwrap_or(0);
             let new_ver = e.version.unwrap_or(0);
             let old_ver = existing.1.version.unwrap_or(0);
-            let better = new_ver > old_ver
-                || (new_ver == old_ver && e.subscribers > existing.1.subscribers)
-                || (new_ver == old_ver
-                    && e.subscribers == existing.1.subscribers
-                    && e.size_bytes.unwrap_or(0) > existing.1.size_bytes.unwrap_or(0));
+            let better = new_atts > old_atts
+                || (new_atts == old_atts && new_size > old_size)
+                || (new_atts == old_atts && new_size == old_size && new_ver > old_ver);
             if better {
                 by_title.insert(title_lower, (key, e));
             }
@@ -154,4 +190,18 @@ fn deduplicate_by_title(
         by_title.into_values().map(|(k, e)| (k, Some(e))).collect();
     result.extend(no_title);
     result
+}
+
+/// Total attestation count for a contract key across all hash variants.
+fn attestation_count(catalog_state: &Option<CatalogState>, key: &str) -> u32 {
+    catalog_state
+        .as_ref()
+        .and_then(|cs| cs.entries.get(key))
+        .map(|e| {
+            e.hash_variants
+                .values()
+                .map(|v| v.attestations.len() as u32)
+                .sum()
+        })
+        .unwrap_or(0)
 }

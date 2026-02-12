@@ -239,11 +239,19 @@ fn compute_trust_from_entries(state: &CatalogState, threshold: u32) -> BTreeMap<
 /// Recompute contributor scores, attestation weights, total_weights, and status
 /// deterministically from the current state. This is the CRDT finalization step.
 fn finalize_state(state: &mut CatalogState, threshold: u32) {
-    // Step 1: Compute trust deterministically from confirmed entries
-    let computed_trust = compute_trust_from_entries(state, threshold);
-
-    // Step 2: Update contributor table using max-wins with computed trust
-    for (pk, trust) in &computed_trust {
+    // Step 1: Ensure every attestor appears in the contributors table.
+    // Count total attestations per pubkey across all entries/variants.
+    let mut all_contributions: BTreeMap<[u8; 32], u32> = BTreeMap::new();
+    for entry in state.entries.values() {
+        for variant in entry.hash_variants.values() {
+            for att in &variant.attestations {
+                *all_contributions
+                    .entry(att.contributor_pubkey)
+                    .or_insert(0) += 1;
+            }
+        }
+    }
+    for (pk, count) in &all_contributions {
         let score = state
             .contributors
             .entry(*pk)
@@ -252,8 +260,15 @@ fn finalize_state(state: &mut CatalogState, threshold: u32) {
                 trust_score: 0,
                 total_contributions: 0,
             });
-        score.trust_score = score.trust_score.max(*trust);
-        score.total_contributions = score.total_contributions.max(*trust);
+        score.total_contributions = score.total_contributions.max(*count);
+    }
+
+    // Step 2: Compute trust from confirmed entries (higher trust for reliable attestors)
+    let computed_trust = compute_trust_from_entries(state, threshold);
+    for (pk, trust) in &computed_trust {
+        if let Some(score) = state.contributors.get_mut(pk) {
+            score.trust_score = score.trust_score.max(*trust);
+        }
     }
 
     // Step 3: Recompute all attestation weights from final contributor table

@@ -99,6 +99,9 @@ pub fn SettingsPanel() -> Element {
                         for record in history.iter().rev().take(20) {
                             li {
                                 span { "{truncate_key(&record.contract_key, 20)}" }
+                                span { class: "text-secondary", style: "font-size: 0.7rem;",
+                                    "{relative_time(record.timestamp)}"
+                                }
                                 {match &record.status {
                                     ContributionStatus::Submitted => rsx! {
                                         span { class: "contribution-status submitted", "Submitted" }
@@ -120,3 +123,17 @@ pub fn SettingsPanel() -> Element {
 }
 
 use super::truncate_key;
+
+fn relative_time(timestamp_ms: u64) -> String {
+    let now_ms = js_sys::Date::now() as u64;
+    let diff_s = now_ms.saturating_sub(timestamp_ms) / 1000;
+    if diff_s < 60 {
+        format!("{}s ago", diff_s)
+    } else if diff_s < 3600 {
+        format!("{}m ago", diff_s / 60)
+    } else if diff_s < 86400 {
+        format!("{}h ago", diff_s / 3600)
+    } else {
+        format!("{}d ago", diff_s / 86400)
+    }
+}

@@ -20,7 +20,7 @@ pub fn parse_query(raw: &str) -> SearchQuery {
     let terms = tokenization::tokenize(raw);
     let term_to_shard: HashMap<String, u8> = terms
         .iter()
-        .map(|t| (t.clone(), hashing::shard_for_word(t, SHARD_COUNT)))
+        .map(|t: &String| (t.clone(), hashing::shard_for_word(t, SHARD_COUNT)))
         .collect();
     SearchQuery {
         terms,
@@ -113,10 +113,7 @@ pub fn execute_search(query: &SearchQuery) -> Vec<SearchResult> {
                 contract_key,
                 title,
                 description,
-                snippet,
                 highlighted_snippet: highlighted,
-                relevance_score,
-                rank_score: rank,
                 combined_score: combined,
                 status,
                 attestation_count,

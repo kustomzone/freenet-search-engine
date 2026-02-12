@@ -33,6 +33,16 @@ wasm-bindgen-futures = "0.4"
 
 # Freenet
 freenet-stdlib = { git = "https://github.com/freenet/freenet-stdlib", rev = "09ba79d", features = ["net"] }
+search-common = { path = "../crates/search-common" }
+
+# Crypto (for contributor identity in settings)
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+rand = "0.8"
+getrandom = { version = "0.2", features = ["js"] }
+
+# Hashing
+sha2 = "0.10"
+ciborium = "0.2"
 
 # XZ decompression (pure Rust, WASM-compatible)
 lzma-rs = "0.3"

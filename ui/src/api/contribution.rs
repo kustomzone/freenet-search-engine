@@ -62,8 +62,10 @@ pub fn retrigger_contributions() {
 /// Called when a WebApp GET response arrives and contribution is enabled.
 pub fn contribute_entry(contract_key: String, state_bytes: Vec<u8>) {
     if !*CONTRIBUTION_ENABLED.read() {
+        tracing::debug!("Contribution disabled, skipping {}", contract_key);
         return;
     }
+    tracing::info!("Contribution pipeline triggered for {}", contract_key);
 
     // Check if already in catalog with same metadata
     let metadata = match extract_metadata(&state_bytes) {
@@ -136,13 +138,24 @@ pub fn contribute_entry(contract_key: String, state_bytes: Vec<u8>) {
         return;
     }
 
+    let catalog_sent = std::cell::Cell::new(false);
     with_current_ws(|ws| {
         let request = ClientRequest::ContractOp(ContractRequest::Update {
             key: placeholder_contract_key(catalog_contract_key()),
             data: UpdateData::Delta(StateDelta::from(delta_bytes.clone())),
         });
         send_request(ws, &request);
+        catalog_sent.set(true);
     });
+    if !catalog_sent.get() {
+        tracing::warn!("Could not send catalog update for {} — WebSocket not open", contract_key);
+        record_contribution(
+            &contract_key,
+            now,
+            ContributionStatus::Failed("WebSocket not open".to_string()),
+        );
+        return;
+    }
 
     // Tokenize snippet and group by shard
     let tokens = tokenize(&metadata.snippet);
