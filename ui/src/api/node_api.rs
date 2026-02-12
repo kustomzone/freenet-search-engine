@@ -255,6 +255,7 @@ fn handle_host_response(bytes: &[u8]) {
                         description.as_deref(),
                         Some(size),
                         version,
+                        true, // fresh extraction — clear stale cache if blank
                     );
                 } else {
                     // Fully cached and unchanged — just update size
@@ -264,6 +265,7 @@ fn handle_host_response(bytes: &[u8]) {
                         None,
                         Some(size),
                         version,
+                        false, // no extraction — preserve cached title/desc
                     );
                 }
                 crate::discovery::cache::save_cache();

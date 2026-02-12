@@ -38,9 +38,16 @@ for f in "$WEBAPP_KEYS" "$WEBAPP_DIR/webapp.parameters"; do
     fi
 done
 
-WEBAPP_ID=$(fdev get-contract-id \
-    --code "$WEB_CONTAINER_WASM" \
-    --parameters "$WEBAPP_DIR/webapp.parameters")
+VANITY_NONCE="$DEPLOY_DIR/webapp-vanity-nonce.bin"
+if [ -f "$VANITY_NONCE" ]; then
+    VANITY_PARAMS=$(mktemp)
+    head -c 32 "$WEBAPP_DIR/webapp.parameters" > "$VANITY_PARAMS"
+    cat "$VANITY_NONCE" >> "$VANITY_PARAMS"
+    WEBAPP_ID=$(fdev get-contract-id --code "$WEB_CONTAINER_WASM" --parameters "$VANITY_PARAMS")
+    rm "$VANITY_PARAMS"
+else
+    WEBAPP_ID=$(fdev get-contract-id --code "$WEB_CONTAINER_WASM" --parameters "$WEBAPP_DIR/webapp.parameters")
+fi
 
 echo "=== Redeploy Webapp ==="
 echo "  ID: $WEBAPP_ID"
@@ -80,6 +87,13 @@ version=$(( $(date +%s) / 60 ))
     --key-file "$WEBAPP_KEYS" \
     --version "$version"
 echo "  Packaged (version=$version)."
+
+# Append vanity nonce if present (sign regenerates parameters to 32 bytes)
+VANITY_NONCE="$DEPLOY_DIR/webapp-vanity-nonce.bin"
+if [ -f "$VANITY_NONCE" ]; then
+    cat "$VANITY_NONCE" >> "$WEBAPP_DIR/webapp.parameters"
+    echo "  Appended vanity nonce ($(wc -c < "$WEBAPP_DIR/webapp.parameters") byte params)."
+fi
 
 # --- Publish ---
 echo ""

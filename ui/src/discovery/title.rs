@@ -129,12 +129,18 @@ fn parse_cbor_uint(data: &[u8]) -> Option<u64> {
 }
 
 /// Update or create an APP_CATALOG entry.
+///
+/// When `extracted = true`, title and description are the result of fresh
+/// metadata extraction and will overwrite cached values (even with None,
+/// clearing stale data from entries that no longer serve content).
+/// When `extracted = false`, only non-None values are merged (preserving cache).
 pub fn update_catalog_entry(
     key: &str,
     title: Option<&str>,
     description: Option<&str>,
     size: Option<u64>,
     version: Option<u64>,
+    extracted: bool,
 ) {
     let now = js_sys::Date::now() as u64 / 1000;
     let mut catalog = APP_CATALOG.write();
@@ -147,11 +153,16 @@ pub fn update_catalog_entry(
         subscribers: 0,
         version: None,
     });
-    if let Some(t) = title {
-        entry.title = Some(t.to_string());
-    }
-    if let Some(d) = description {
-        entry.description = Some(d.to_string());
+    if extracted {
+        entry.title = title.map(|t| t.to_string());
+        entry.description = description.map(|d| d.to_string());
+    } else {
+        if let Some(t) = title {
+            entry.title = Some(t.to_string());
+        }
+        if let Some(d) = description {
+            entry.description = Some(d.to_string());
+        }
     }
     if let Some(s) = size {
         entry.size_bytes = Some(s);

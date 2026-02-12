@@ -26,6 +26,7 @@ pub fn try_fetch_title(key: String, version: Option<u64>, size: Option<u64>) {
                         description.as_deref(),
                         size,
                         version,
+                        true, // fresh extraction
                     );
                     crate::discovery::cache::save_cache();
                 }

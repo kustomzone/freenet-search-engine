@@ -169,15 +169,22 @@ fn deduplicate_by_title(
         let title_lower = title.to_lowercase();
 
         if let Some(existing) = by_title.get(&title_lower) {
+            let new_content = has_content(&e);
+            let old_content = has_content(&existing.1);
             let new_atts = attestation_count(catalog_state, &key);
             let old_atts = attestation_count(catalog_state, &existing.0);
             let new_size = e.size_bytes.unwrap_or(0);
             let old_size = existing.1.size_bytes.unwrap_or(0);
             let new_ver = e.version.unwrap_or(0);
             let old_ver = existing.1.version.unwrap_or(0);
-            let better = new_atts > old_atts
-                || (new_atts == old_atts && new_size > old_size)
-                || (new_atts == old_atts && new_size == old_size && new_ver > old_ver);
+            // Working content (non-blank page) wins first, then attestations, size, version
+            let better = (new_content && !old_content)
+                || (new_content == old_content && new_atts > old_atts)
+                || (new_content == old_content && new_atts == old_atts && new_size > old_size)
+                || (new_content == old_content
+                    && new_atts == old_atts
+                    && new_size == old_size
+                    && new_ver > old_ver);
             if better {
                 by_title.insert(title_lower, (key, e));
             }
@@ -190,6 +197,16 @@ fn deduplicate_by_title(
         by_title.into_values().map(|(k, e)| (k, Some(e))).collect();
     result.extend(no_title);
     result
+}
+
+/// Whether an entry has actual page content (non-blank).
+/// A blank page (e.g. just `<div id="main"></div>`) yields no description.
+fn has_content(entry: &AppEntry) -> bool {
+    entry
+        .description
+        .as_ref()
+        .map(|d| !d.is_empty())
+        .unwrap_or(false)
 }
 
 /// Total attestation count for a contract key across all hash variants.

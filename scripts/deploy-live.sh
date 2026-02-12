@@ -90,14 +90,17 @@ echo "  catalog: $(du -h "$CATALOG_CODE" | cut -f1)  shard: $(du -h "$SHARD_CODE
 echo ""
 echo "[3/7] Generating CBOR state/parameter files..."
 
-# Preserve webapp signing keys + manifest across deploy dir clean
+# Preserve webapp signing keys + vanity nonce + manifest across deploy dir clean
 WEBAPP_KEYS="$DEPLOY_DIR/webapp-keys.toml"
-SAVED_KEYS="" ; SAVED_MANIFEST=""
-if [ -f "$WEBAPP_KEYS" ]; then SAVED_KEYS=$(mktemp); cp "$WEBAPP_KEYS" "$SAVED_KEYS"; fi
-if [ -f "$MANIFEST" ];    then SAVED_MANIFEST=$(mktemp); cp "$MANIFEST" "$SAVED_MANIFEST"; fi
+VANITY_NONCE="$DEPLOY_DIR/webapp-vanity-nonce.bin"
+SAVED_KEYS="" ; SAVED_MANIFEST="" ; SAVED_NONCE=""
+if [ -f "$WEBAPP_KEYS" ];  then SAVED_KEYS=$(mktemp); cp "$WEBAPP_KEYS" "$SAVED_KEYS"; fi
+if [ -f "$MANIFEST" ];     then SAVED_MANIFEST=$(mktemp); cp "$MANIFEST" "$SAVED_MANIFEST"; fi
+if [ -f "$VANITY_NONCE" ]; then SAVED_NONCE=$(mktemp); cp "$VANITY_NONCE" "$SAVED_NONCE"; fi
 rm -rf "$DEPLOY_DIR" && mkdir -p "$DEPLOY_DIR"
 if [ -n "$SAVED_KEYS" ];     then mv "$SAVED_KEYS" "$WEBAPP_KEYS"; fi
 if [ -n "$SAVED_MANIFEST" ]; then mv "$SAVED_MANIFEST" "$MANIFEST"; fi
+if [ -n "$SAVED_NONCE" ];    then mv "$SAVED_NONCE" "$VANITY_NONCE"; fi
 
 cargo run -p deploy-helper -- "$DEPLOY_DIR" 2>/dev/null
 
@@ -131,8 +134,18 @@ if [ ! -f "$WEBAPP_DIR/webapp.parameters" ]; then
     rm -f /tmp/webapp-bootstrap.tar.xz /tmp/webapp-bootstrap.metadata
 fi
 
-WEBAPP_ID=$(fdev get-contract-id --code "$WEB_CONTAINER_WASM" --parameters "$WEBAPP_DIR/webapp.parameters")
-echo "  Webapp:  $WEBAPP_ID"
+if [ -f "$VANITY_NONCE" ]; then
+    # Compute ID with nonce-extended parameters
+    VANITY_PARAMS=$(mktemp)
+    head -c 32 "$WEBAPP_DIR/webapp.parameters" > "$VANITY_PARAMS"
+    cat "$VANITY_NONCE" >> "$VANITY_PARAMS"
+    WEBAPP_ID=$(fdev get-contract-id --code "$WEB_CONTAINER_WASM" --parameters "$VANITY_PARAMS")
+    rm "$VANITY_PARAMS"
+    echo "  Webapp:  $WEBAPP_ID (vanity)"
+else
+    WEBAPP_ID=$(fdev get-contract-id --code "$WEB_CONTAINER_WASM" --parameters "$WEBAPP_DIR/webapp.parameters")
+    echo "  Webapp:  $WEBAPP_ID"
+fi
 
 # Current artifact hashes
 cur_catalog_wasm_sha=$(sha256_file "$CATALOG_CODE")
@@ -254,6 +267,13 @@ if $WEBAPP_NEEDS_PUBLISH; then
         --key-file "$WEBAPP_KEYS" \
         --version "$version"
     echo "  Signed (version=$version)."
+
+    # Append vanity nonce if present (sign regenerates parameters to 32 bytes)
+    VANITY_NONCE="$DEPLOY_DIR/webapp-vanity-nonce.bin"
+    if [ -f "$VANITY_NONCE" ]; then
+        cat "$VANITY_NONCE" >> "$WEBAPP_DIR/webapp.parameters"
+        echo "  Appended vanity nonce ($(wc -c < "$WEBAPP_DIR/webapp.parameters") byte params)."
+    fi
 
     cur_dx_output_sha=$(find "$DX_OUTPUT" -type f -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1)
     TO_PUBLISH+=("webapp:0")

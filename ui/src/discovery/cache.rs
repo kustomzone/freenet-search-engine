@@ -8,7 +8,7 @@ use crate::state::{AppEntry, APP_CATALOG};
 const STORAGE_KEY: &str = "freenet_search_apps";
 
 /// Bump this when the AppEntry schema changes to auto-clear stale caches.
-const CACHE_VERSION: u32 = 4;
+const CACHE_VERSION: u32 = 5;
 
 #[derive(Serialize, Deserialize)]
 struct CacheData {
