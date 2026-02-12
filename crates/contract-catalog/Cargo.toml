@@ -1,0 +1,22 @@
+[package]
+name = "contract-catalog"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["freenet-main-contract"]
+contract = []
+freenet-main-contract = ["contract"]
+
+[dependencies]
+search-common = { workspace = true }
+freenet-stdlib = { workspace = true, features = ["contract"] }
+ciborium = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+ed25519-dalek = { workspace = true }

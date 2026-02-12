@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Freenet Chess Arena</title>
+    <meta name="description" content="Peer-to-peer chess platform on Freenet with ranked matchmaking, game history, and tournament support">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; background: #1a1a2e; color: #e0e6ed; }
+        h1 { color: #58a6ff; }
+        h2 { color: #7f8ea3; }
+        .board { display: grid; grid-template-columns: repeat(8, 40px); gap: 0; margin: 1rem 0; }
+        .board span { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+        .light { background: #f0d9b5; }
+        .dark { background: #b58863; }
+        .card { border: 1px solid #2a3550; border-radius: 8px; padding: 1rem; margin: 1rem 0; background: #1e2a47; }
+    </style>
+</head>
+<body>
+    <h1>Freenet Chess Arena</h1>
+    <p>Play chess with anyone on the Freenet network. Games are stored as contract states
+    with cryptographic move verification, making cheating impossible. Ranked ELO matchmaking
+    pairs you with opponents of similar skill.</p>
+    <div class="board">
+        <span class="light">&#9820;</span><span class="dark">&#9822;</span><span class="light">&#9821;</span><span class="dark">&#9819;</span>
+        <span class="light">&#9818;</span><span class="dark">&#9821;</span><span class="light">&#9822;</span><span class="dark">&#9820;</span>
+        <span class="dark">&#9823;</span><span class="light">&#9823;</span><span class="dark">&#9823;</span><span class="light">&#9823;</span>
+        <span class="dark">&#9823;</span><span class="light">&#9823;</span><span class="dark">&#9823;</span><span class="light">&#9823;</span>
+    </div>
+    <div class="card">
+        <h2>Features</h2>
+        <ul>
+            <li>Peer-to-peer games with no central server</li>
+            <li>Cryptographic move verification prevents cheating</li>
+            <li>ELO-based ranked matchmaking</li>
+            <li>Game history stored as Freenet contracts</li>
+            <li>Weekly tournaments with community brackets</li>
+        </ul>
+    </div>
+    <div class="card">
+        <h2>How It Works</h2>
+        <p>Each game is a Freenet contract where both players submit signed moves.
+        The contract validates move legality and updates the board state. Game results
+        are aggregated into a ranking contract that tracks ELO scores across all players.</p>
+    </div>
+</body>
+</html>

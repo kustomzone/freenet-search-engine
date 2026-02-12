@@ -1,0 +1,25 @@
+[package]
+name = "delegate-identity"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["freenet-main-delegate"]
+delegate = []
+freenet-main-delegate = ["delegate"]
+trace = []
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(feature, values("freenet-main-delegate", "trace"))'] }
+
+[dependencies]
+freenet-stdlib = { workspace = true, features = ["contract"] }
+ed25519-dalek = { workspace = true, features = ["rand_core"] }
+serde = { workspace = true }
+ciborium = { workspace = true }
+rand = { version = "0.8", default-features = false, features = ["std"] }
+
+[dev-dependencies]

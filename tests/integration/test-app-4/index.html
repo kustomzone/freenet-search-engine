@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MeshBoard - Decentralized Forum</title>
+    <meta name="description" content="Community discussion forum built on Freenet with moderation, reputation scoring, and censorship-resistant threads">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        h1 { color: #059669; }
+        .thread { border-left: 3px solid #059669; padding: 0.75rem 1rem; margin: 0.75rem 0; background: #f0fdf4; border-radius: 0 6px 6px 0; }
+        .thread h3 { margin: 0 0 0.25rem; }
+        .thread .meta { font-size: 0.8rem; color: #6b7280; }
+        .stats { display: flex; gap: 2rem; margin: 1.5rem 0; }
+        .stat { text-align: center; }
+        .stat .num { font-size: 2rem; font-weight: bold; color: #059669; }
+    </style>
+</head>
+<body>
+    <h1>MeshBoard</h1>
+    <p>A censorship-resistant discussion forum where communities self-moderate through
+    reputation and stake-weighted voting. All posts are stored as Freenet contract
+    states with CRDT-based conflict resolution for concurrent edits.</p>
+    <div class="stats">
+        <div class="stat"><div class="num">142</div>Active Threads</div>
+        <div class="stat"><div class="num">1.2k</div>Posts Today</div>
+        <div class="stat"><div class="num">89</div>Contributors</div>
+    </div>
+    <div class="thread">
+        <h3>Welcome to MeshBoard</h3>
+        <p>Introduce yourself to the community and learn how decentralized moderation works.</p>
+        <div class="meta">Posted by admin | 23 replies | Score: 47</div>
+    </div>
+    <div class="thread">
+        <h3>Building Apps on Freenet</h3>
+        <p>Share your experience building decentralized applications with Freenet contracts and delegates.</p>
+        <div class="meta">Posted by devfan | 8 replies | Score: 31</div>
+    </div>
+    <div class="thread">
+        <h3>Privacy Best Practices</h3>
+        <p>Discussion about maintaining privacy while participating in decentralized networks.</p>
+        <div class="meta">Posted by privacyfirst | 15 replies | Score: 52</div>
+    </div>
+    <h2>How Moderation Works</h2>
+    <p>MeshBoard uses reputation-weighted voting for content moderation. Users earn reputation
+    by contributing quality posts and receiving upvotes. Moderation decisions are recorded
+    on-chain as attestations, ensuring transparency and preventing abuse of power.</p>
+</body>
+</html>

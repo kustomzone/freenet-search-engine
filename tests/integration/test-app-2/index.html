@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CryptoNotes - Encrypted Notebook</title>
+    <meta name="description" content="End-to-end encrypted personal notebook application built on Freenet for private and secure note-taking">
+    <style>
+        body { font-family: Georgia, serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; background: #fafaf9; }
+        h1 { color: #7c3aed; }
+        .editor { border: 2px solid #d4d4d8; border-radius: 4px; min-height: 200px; padding: 1rem; background: white; }
+    </style>
+</head>
+<body>
+    <h1>CryptoNotes</h1>
+    <p>A fully encrypted personal notebook that stores your notes securely on the Freenet network.
+    All encryption happens client-side using AES-256-GCM. Your notes are never visible to anyone
+    but you, not even the nodes storing the encrypted data.</p>
+    <div class="editor" contenteditable="true">
+        <p>Start typing your encrypted notes here...</p>
+    </div>
+    <h2>How It Works</h2>
+    <p>CryptoNotes uses a Freenet delegate to manage your encryption keys locally.
+    Each note is encrypted before being stored as a contract state update.
+    The decentralized storage ensures your notes are always available while
+    the end-to-end encryption guarantees only you can read them.</p>
+    <h2>Security Features</h2>
+    <ul>
+        <li>AES-256-GCM client-side encryption</li>
+        <li>Ed25519 key management via Freenet delegates</li>
+        <li>Zero-knowledge note storage</li>
+        <li>Automatic key rotation</li>
+    </ul>
+</body>
+</html>

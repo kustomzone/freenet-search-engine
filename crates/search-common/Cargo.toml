@@ -1,0 +1,17 @@
+[package]
+name = "search-common"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+serde = { workspace = true }
+ciborium = { workspace = true }
+sha2 = { workspace = true }
+lzma-rs = { workspace = true }
+unicode-normalization = "0.1"
+
+[dev-dependencies]
+proptest = { workspace = true }

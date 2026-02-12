@@ -1,0 +1,31 @@
+[workspace]
+members = [
+    "ui",
+    "crates/search-common",
+    "crates/contract-catalog",
+    "crates/contract-fulltext-shard",
+    "crates/delegate-identity",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+ciborium = "0.2"
+sha2 = "0.10"
+lzma-rs = "0.3"
+unicode-normalization = "0.1"
+freenet-stdlib = { git = "https://github.com/freenet/freenet-stdlib", rev = "09ba79d" }
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+proptest = "1"
+search-common = { path = "crates/search-common" }
+
+[profile.release]
+opt-level = 'z'
+lto = true
+codegen-units = 1
+panic = 'abort'
+strip = true

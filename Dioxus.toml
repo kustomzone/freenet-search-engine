@@ -1,0 +1,8 @@
+[application]
+name = "freenet-search-engine"
+default_platform = "web"
+
+[web.app]
+title = "Freenet Search"
+
+[web.resource.dev]
