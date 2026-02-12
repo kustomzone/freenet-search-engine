@@ -39,7 +39,7 @@ pub fn AppDirectory() -> Element {
 
     // Deduplicate: group by title, keep the best entry per title
     let catalog_state = CATALOG_STATE.read();
-    let entries = deduplicate_by_title(entries, &*catalog_state);
+    let entries = deduplicate_by_title(entries, &catalog_state);
     drop(catalog_state);
 
     // Apply search
