@@ -178,6 +178,10 @@ The search engine app itself, deployed as a Freenet web container.
 
 The tar.xz contains: `index.html`, compiled WASM, CSS, JS glue code.
 
+**Vanity Contract ID**: The app uses a vanity nonce to produce a human-readable contract ID prefix (e.g. `FinderTZGH...`). The 8-byte nonce is appended to the 32-byte Ed25519 verifying key in `webapp.parameters` (40 bytes total). The `web_container_contract` ignores bytes after the first 32, so the nonce is transparent to the contract runtime. See `freenet-vanity-id` for the grinder tool and deploy workflow.
+
+**Deployment**: The deploy scripts (`scripts/deploy-live.sh`, `scripts/redeploy-webapp.sh`) handle vanity nonce preservation across sign steps. The signing tool regenerates `webapp.parameters` to exactly 32 bytes each time, so the nonce must be appended *after* every sign step. The scripts use `head -c 32` to extract the verifying key before appending the nonce, preventing double-nonce corruption.
+
 ### 1.5 Delegate (user identity & keys)
 
 The delegate manages the user's cryptographic identity for contributions:
@@ -368,11 +372,13 @@ freenet-search-engine/
 │   │   ├── search/                 # NEW: Search logic
 │   │   │   ├── query.rs            # Query parsing, shard routing
 │   │   │   └── ranking.rs          # Result scoring + passive ranking + reputation
-│   │   ├── discovery/              # REFACTORED: Uses search-common
-│   │   │   ├── pipeline.rs         # Deterministic extraction (replaces title.rs + cache.rs)
-│   │   │   └── detector.rs         # WebApp detection (extracted from node_api.rs)
+│   │   ├── discovery/              # Contract discovery & metadata extraction
+│   │   │   ├── title.rs            # HTML title/description extraction, update_catalog_entry (with extracted flag)
+│   │   │   ├── cache.rs            # localStorage L1 cache (versioned, auto-clearing)
+│   │   │   ├── http_fallback.rs    # HTTP fallback for title extraction when XZ decompression fails
+│   │   │   └── detector.rs         # WebApp format detection (extracted from node_api.rs)
 │   │   └── views/
-│   │       ├── app_directory.rs    # REFACTORED: Reads from SearchCatalog
+│   │       ├── app_directory.rs    # REFACTORED: Content-aware dedup, reads from SearchCatalog
 │   │       ├── search_bar.rs       # ENHANCED: Full-text search
 │   │       ├── search_results.rs   # NEW: Ranked results with snippets + trust indicators
 │   │       ├── app_card.rs         # ENHANCED: Trust indicator + reputation badge
@@ -387,7 +393,23 @@ freenet-search-engine/
 └── Cargo.toml                      # workspace: ui, crates/*
 ```
 
-## 6. Passive Ranking + Reputation (v1)
+## 6. Display, Deduplication & Ranking
+
+### 6.1 Content-Aware Deduplication
+
+Multiple contract keys may correspond to different versions of the same app (e.g. after redeployment with a new vanity nonce). The UI deduplicates entries by lowercase title, keeping the "best" entry per app.
+
+**Ranking for dedup** (in priority order):
+1. **Working content** — entries with a non-empty description (extracted from live HTML) are preferred over blank pages. This is the primary signal: if one version actually renders content and another doesn't, the working one wins regardless of other metrics.
+2. **Attestation count** — total attestations across all hash variants in the catalog contract (network-wide trust signal).
+3. **State size** — larger state = more complete contract content.
+4. **Version** — tiebreaker from CBOR metadata.
+
+Subscribers are NOT used for dedup — they only reflect direct peers, not network-wide popularity.
+
+Entries without a title are not deduplicated and appear individually.
+
+### 6.2 Passive Ranking + Reputation (v1)
 
 No active community voting. Ranking is computed client-side from passive metrics and contributor reputation:
 
@@ -423,6 +445,10 @@ L4: Network fetch (slow, only when node doesn't have the contract)
 ```
 
 localStorage is preserved as L1 for instant page loads. On startup: load from localStorage immediately, then subscribe to contracts and update localStorage when fresh state arrives.
+
+**Cache versioning**: The L1 cache includes a `CACHE_VERSION` integer. When the `AppEntry` schema changes, the version is bumped and stale caches are automatically cleared on next load.
+
+**Stale entry clearing**: When fresh metadata extraction produces no title or description (e.g. blank-page apps), the cached values must be overwritten — not preserved. The `update_catalog_entry` function takes an `extracted: bool` flag: when `true` (fresh extraction from contract state), title and description are always overwritten (even with `None`); when `false` (cache-only update), existing values are preserved. This prevents stale metadata from a previous contract version persisting indefinitely.
 
 ### 7.2 Startup Sequence
 
