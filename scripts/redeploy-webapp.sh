@@ -14,9 +14,8 @@ set -euo pipefail
 #   ./scripts/redeploy-webapp.sh --skip-build  # repackage + deploy only (no dx build)
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RIVER_ROOT="$HOME/Dev/Freenet/river"
-WEB_CONTAINER_TOOL="$RIVER_ROOT/target/native/x86_64-unknown-linux-gnu/release/web-container-tool"
-WEB_CONTAINER_WASM="$RIVER_ROOT/published-contract/web_container_contract.wasm"
+WEB_CONTAINER_TOOL="$PROJECT_ROOT/target/release/web-container-tool"
+WEB_CONTAINER_WASM="$PROJECT_ROOT/target/wasm32-unknown-unknown/release/web_container_contract.wasm"
 DEPLOY_DIR="$PROJECT_ROOT/target/deploy"
 WEBAPP_DIR="$PROJECT_ROOT/target/webapp"
 WEBAPP_KEYS="$DEPLOY_DIR/webapp-keys.toml"

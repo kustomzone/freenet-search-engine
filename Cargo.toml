@@ -5,7 +5,9 @@ members = [
     "crates/contract-catalog",
     "crates/contract-fulltext-shard",
     "crates/delegate-identity",
+    "crates/web-container-contract",
     "tools/deploy-helper",
+    "tools/web-container-tool",
 ]
 resolver = "2"
 
@@ -15,12 +17,13 @@ edition = "2021"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
+byteorder = "1"
 ciborium = "0.2"
 sha2 = "0.10"
 lzma-rs = "0.3"
 unicode-normalization = "0.1"
-freenet-stdlib = { git = "https://github.com/freenet/freenet-stdlib", rev = "09ba79d" }
-ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+freenet-stdlib = { git = "https://github.com/freenet/freenet-stdlib", rev = "0a941ce" }
+ed25519-dalek = { version = "2.1", features = ["rand_core", "serde"] }
 proptest = "1"
 search-common = { path = "crates/search-common" }
 

@@ -7,7 +7,7 @@ set -euo pipefail
 # Prerequisites:
 #   - ./scripts/network-start.sh must have been run
 #   - fdev, dx must be in PATH
-#   - River's web-container-tool must be built
+#   - web-container-tool must be built (for webapp signing)
 #
 # To revert to single-node mode:
 #   ./scripts/network-stop.sh
@@ -18,9 +18,8 @@ set -euo pipefail
 #   ./scripts/deploy-network.sh
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RIVER_ROOT="$HOME/Dev/Freenet/river"
-WEB_CONTAINER_TOOL="$RIVER_ROOT/target/native/x86_64-unknown-linux-gnu/release/web-container-tool"
-WEB_CONTAINER_WASM="$RIVER_ROOT/published-contract/web_container_contract.wasm"
+WEB_CONTAINER_TOOL="$PROJECT_ROOT/target/release/web-container-tool"
+WEB_CONTAINER_WASM="$PROJECT_ROOT/target/wasm32-unknown-unknown/release/web_container_contract.wasm"
 DEPLOY_DIR="$PROJECT_ROOT/target/deploy"
 WEBAPP_DIR="$PROJECT_ROOT/target/webapp"
 DIOXUS_TOML="$PROJECT_ROOT/Dioxus.toml"
@@ -120,7 +119,7 @@ echo ""
 echo "[6/10] Building UI with dx (base_path set for web container)..."
 
 # Set base_path in Dioxus.toml so asset paths resolve correctly
-# under /v1/contract/web/{key}/ (River does the same thing).
+# under /v1/contract/web/{key}/ so asset paths resolve correctly.
 sed -i '/^base_path/d' "$DIOXUS_TOML"
 sed -i "/\[web\.app\]/a base_path = \"v1/contract/web/$WEBAPP_ID\"" "$DIOXUS_TOML"
 

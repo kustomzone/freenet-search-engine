@@ -4,16 +4,18 @@ A decentralized search engine for discovering web applications on the [Freenet](
 
 ## Architecture
 
-The project is a Rust workspace with 5 crates:
+The project is a self-contained Rust workspace:
 
 | Crate | Description |
 |-------|-------------|
 | `search-common` | Shared types, CBOR serialization, tokenization, scoring, bloom filters, web container extraction |
 | `contract-catalog` | Freenet contract storing the app catalog (URL metadata, contributor reputation, anti-Sybil) |
 | `contract-fulltext-shard` | Freenet contract storing inverted index shards for full-text search |
+| `web-container-contract` | Freenet contract serving the compiled UI as a signed web container |
 | `delegate-identity` | Freenet delegate managing ed25519 keypairs for contributor identity |
 | `ui` | Dioxus 0.7 WASM app — browsing, search, and contribution UI |
 | `deploy-helper` | CLI tool generating CBOR artifacts and contract IDs for deployment |
+| `web-container-tool` | CLI tool for Ed25519 key generation and webapp signing |
 
 ### How it works
 

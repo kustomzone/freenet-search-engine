@@ -9,15 +9,14 @@ set -euo pipefail
 # Prerequisites:
 #   - freenet node running in network mode: systemctl --user start freenet
 #   - fdev, dx, cargo, tar, xz, curl in PATH
-#   - River's web-container-tool and web_container_contract.wasm built
+#   - web-container-tool must be built (for webapp signing)
 #
 # Usage:
 #   ./scripts/deploy-live.sh [--force] [--dry-run]
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RIVER_ROOT="$HOME/Dev/Freenet/river"
-WEB_CONTAINER_TOOL="$RIVER_ROOT/target/native/x86_64-unknown-linux-gnu/release/web-container-tool"
-WEB_CONTAINER_WASM="$RIVER_ROOT/published-contract/web_container_contract.wasm"
+WEB_CONTAINER_TOOL="$PROJECT_ROOT/target/release/web-container-tool"
+WEB_CONTAINER_WASM="$PROJECT_ROOT/target/wasm32-unknown-unknown/release/web_container_contract.wasm"
 DEPLOY_DIR="$PROJECT_ROOT/target/deploy"
 WEBAPP_DIR="$PROJECT_ROOT/target/webapp"
 DIOXUS_TOML="$PROJECT_ROOT/Dioxus.toml"
