@@ -2,6 +2,8 @@
 
 A decentralized search engine for discovering web applications on the [Freenet](https://freenet.org) network. The search index is a shared Freenet contract contributed to by all participants — no central server, no crawlers.
 
+<img width="1202" height="663" alt="image" src="https://github.com/user-attachments/assets/4b3b8d84-663d-45f5-85a0-54f63b31648a" />
+
 ## Architecture
 
 The project is a self-contained Rust workspace:
